@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as pyplot
 import seaborn as sbn
 import numpy as np
+import time
 from sklearn import svm
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.preprocessing import StandardScaler
@@ -34,39 +35,43 @@ def SVM_function(input_file, k):
     kf = KFold(n_splits=k, random_state=None)
     SVM = svm.SVC(kernel='linear')
     
-    acc_score = []
     prec_score = []
     recall_score = []
     F1_score = []
+    
+    start = time.time()
+    counter = 0
     
     for train_index, test_index in kf.split(X):
         X_train, X_test = X.iloc[train_index,:],X.iloc[test_index,:]
         y_train, y_test = y[train_index], y[test_index]
     
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.fit_transform(X_test)
+        
         SVM.fit(X_train, y_train)
         pred_values = SVM.predict(X_test)
         
-        acc = accuracy_score(pred_values, y_test)
         F1 = f1_score(y_test, pred_values, average='binary')
         cm = confusion_matrix(y_test, pred_values)
         prec, recall = calc_stats(cm) 
         
         print('CM (TN, FN, TP, FP): ', cm)
-        acc_score.append(acc)
         prec_score.append(prec)
         recall_score.append(recall)
         F1_score.append(F1)
     
-    avg_acc_score = sum(acc_score)/k
     avg_prec_score = sum(prec_score)/k
     avg_recall_score = sum(recall_score)/k
     avg_F1_score = sum(F1_score)/k
     
-    print('Average accuracy:',avg_acc_score)
     print('Average precision:',avg_prec_score)
     print('Average recall:',avg_recall_score)
     print('Average F1 score:',avg_F1_score)
     
+    print('Processing time:', round((time.time() - start),2), 'seconds')
+
 def calc_stats(CM):
     TN = CM[0][0]
     FN = CM[0][1]

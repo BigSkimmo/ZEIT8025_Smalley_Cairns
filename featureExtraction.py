@@ -32,13 +32,17 @@ import sys
 import math
 
 # Path to folder containing javascript files
-benign_target_folder_path = ".\\benign_subset"
-malicious_target_folder_path = ".\\malicious_subset"
+#benign_target_folder_path = ".\\benign_subset_10pct"
+#malicious_target_folder_path = ".\\malicious_subset_10pct"
 benign_target_folder_path = ".\\benign"
 malicious_target_folder_path = ".\\malicious"
 
+#Set to 1 for paralell processing
+#Increases speed of processing the dataset but runs risk of resource lock causing a program stall
+parallel_processing = 0
+
 # Output CSV location
-output_file_loc = ".\\js_feature_extraction.csv"
+output_file_loc = ".\\js_feature_extraction_all.csv"
 
 # Prepare the first line of the output
 #to add a new field: add here, add calculation in process(), 
@@ -59,9 +63,15 @@ fields = [
 	'numWords',
 	'pcWNC', 
 	'entropy',
+	'e_pct', 
+	'n_pct', 
+	't_pct', 
+	'i_pct', 
+	'o_pct', 
+	'a_pct',
 	'malicious']
 
-fields = ['entropy', 'e_pct', 'n_pct', 't_pct', 'i_pct', 'o_pct', 'a_pct', 'malicious']
+#fields = ['entropy', 'e_pct', 'n_pct', 't_pct', 'i_pct', 'o_pct', 'a_pct', 'malicious']
 
 with open(output_file_loc, 'w+', newline='') as outfile:
 	write = csv.writer(outfile)
@@ -92,7 +102,7 @@ def process(input_file):
 	#print(input_file)
 	file = open(input_file, encoding="ISO-8859-1").read()
 	file_as_string = "".join(file)
-	'''
+	
 	# 01: Length in characters (len_chars) - don't process this file if the file is empty
 	len_chars = len(file)
 	if len_chars == 0:
@@ -213,7 +223,7 @@ def process(input_file):
 	num_methods = len(methods)
 	if num_methods > 0:  # Catch divide by zero
 		avg_arglen = round(avg_arglen / len(methods), 4)
-	'''
+	
 	# entropy
 	entropy = calculate_entropy(file_as_string)
 	
@@ -226,23 +236,34 @@ def process(input_file):
 	#Letter frequency (%) for e,n,t,i,o,a
 	#Will count frequency of all ascii char
 	char_frequency = {}
+	file_char_count = 0
 	for i in range(256):
 		char_frequency[i] = 0
 	
 	for file_char in file_as_string:
 		char_frequency[ord(file_char)] += 1
+		file_char_count += 1
 	#ignoring upper case for now
-	e_pct = char_frequency[101]/len(file_as_string)
-	n_pct = char_frequency[110]/len(file_as_string)
-	t_pct = char_frequency[116]/len(file_as_string)
-	i_pct = char_frequency[105]/len(file_as_string)
-	o_pct = char_frequency[111]/len(file_as_string)
-	a_pct = char_frequency[97]/len(file_as_string)
+	if file_char_count > 0:
+		e_pct = char_frequency[101]/file_char_count
+		n_pct = char_frequency[110]/file_char_count
+		t_pct = char_frequency[116]/file_char_count
+		i_pct = char_frequency[105]/file_char_count
+		o_pct = char_frequency[111]/file_char_count
+		a_pct = char_frequency[97]/file_char_count
+	else:
+		e_pct = 0
+		n_pct = 0
+		t_pct = 0
+		i_pct = 0
+		o_pct = 0
+		a_pct = 0
+		
 
 	# --------------------------------------------------------- #
 	#						 OUTPUT							#
 	# --------------------------------------------------------- #
-	'''outlist = [
+	outlist = [
 		len_chars, 
 		avg_char_line, 
 		num_lines, 
@@ -259,8 +280,14 @@ def process(input_file):
 		num_words, 
 		words_not_comments,
 		entropy, 
-		malicious]'''
-	outlist = [entropy, e_pct, n_pct, t_pct, i_pct, o_pct, a_pct, malicious]
+		e_pct, 
+		n_pct, 
+		t_pct, 
+		i_pct, 
+		o_pct, 
+		a_pct,
+		malicious]
+	#outlist = [entropy, e_pct, n_pct, t_pct, i_pct, o_pct, a_pct, malicious]
 
 	outfile = open(output_file_loc, 'a', newline='')
 	write = csv.writer(outfile)
@@ -317,7 +344,7 @@ def get_js_files(file_paths):
 start_time = time.time()
 
 # Are these benign files or malicious files (0 = benign, 1 = malicious)
-malicious = 0
+malicious = "Benign"
 
 #iterate filesystem for benign js files
 benign_js_file_list = get_js_files([benign_target_folder_path])
@@ -328,16 +355,39 @@ print("Commencing processing benign scripts...")
 
 main_output_list = []
 
-with concurrent.futures.ThreadPoolExecutor() as executor:
-	futures = []
+files_complete = 0
+pct_complete = 0
+
+#updates the percentage complete, prints result if a whole percent is incremented
+def update_pct_complete(files_complete, files_total, pct_complete, data_set_name):
+	if pct_complete < round(files_complete/files_total, 0):
+		print(str(pct_complete + 1) + "% complete processing " + data_set_name + " scripts")
+	return round(files_complete/files_total, 0)
+
+if parallel_processing:
+	with concurrent.futures.ThreadPoolExecutor() as executor:
+		futures = []
+		for infile in benign_js_file_list:
+			futures.append(executor.submit(process, input_file=infile))
+			files_complete += 1
+			#print(files_complete)
+			#pct_complete = update_pct_complete(files_complete, len(benign_js_file_list), pct_complete, "benign")
+		for future in concurrent.futures.as_completed(futures):
+			main_output_list.append(future.result())
+			executor.shutdown()
+else:
 	for infile in benign_js_file_list:
-		futures.append(executor.submit(process, input_file=infile))
-	for future in concurrent.futures.as_completed(futures):
-		main_output_list.append(future.result())
-		executor.shutdown()
+		process(infile)
+		files_complete += 1
+		#print(files_complete)
+		#pct_complete = update_pct_complete(files_complete, len(benign_js_file_list), pct_complete, "benign")
+		#if pct_complete < round(files_complete/len(benign_js_file_list)*100,0):
+		#	pct_complete = round(files_complete/len(benign_js_file_list)*100,0)
+		#	print(str(pct_complete) + "% complete processing benign scripts")
+	
 
 # Are these benign files or malicious files (0 = benign, 1 = malicious)
-malicious = 1
+malicious = "Malware"
 
 #iterate filesystem for malicious js files
 malicious_js_file_list = get_js_files([malicious_target_folder_path])
@@ -348,13 +398,29 @@ print("Commencing processing malicious scripts...")
 
 main_output_list = []
 
-with concurrent.futures.ThreadPoolExecutor() as executor:
-	futures = []
+files_complete = 0
+pct_complete = 0
+
+if parallel_processing:
+	with concurrent.futures.ThreadPoolExecutor() as executor:
+		futures = []
+		for infile in malicious_js_file_list:
+			futures.append(executor.submit(process, input_file=infile))
+			files_complete += 1
+			#print(files_complete)
+			#pct_complete = update_pct_complete(files_complete, len(malicious_js_file_list), pct_complete, "malicious")
+		for future in concurrent.futures.as_completed(futures):
+			main_output_list.append(future.result())
+			executor.shutdown()
+else:
 	for infile in malicious_js_file_list:
-		futures.append(executor.submit(process, input_file=infile))
-	for future in concurrent.futures.as_completed(futures):
-		main_output_list.append(future.result())
-		executor.shutdown()
+		process(infile)
+		files_complete += 1
+		#print(files_complete)
+		#pct_complete = update_pct_complete(files_complete, len(malicious_js_file_list), pct_complete, "malicious")
+		#if pct_complete < round(files_complete/len(malicious_js_file_list)*100,0):
+		#	pct_complete = round(files_complete/len(malicious_js_file_list)*100,0)
+		#	print(str(pct_complete) + "% complete processing malicious scripts")
 
 print("Processing complete. Time taken:", round(time.time() - start_time,2), 'seconds')
 print("Complete.")

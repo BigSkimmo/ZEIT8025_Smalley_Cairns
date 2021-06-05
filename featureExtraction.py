@@ -21,6 +21,25 @@
 # 										whitespace and javascript symbols (for example, arithmetic operators).
 # 15: % words not in comments 			The percentage of words in the script that are not commented out.
 #
+# 16: Entropy                           Shannon entropy of the file
+#
+# 17: e_pct                             Percentage of characters that are the letter e
+# 18: n_pct                             Percentage of characters that are the letter n
+# 19: t_pct                             Percentage of characters that are the letter t
+# 20: i_pct                             Percentage of characters that are the letter i
+# 21: o_pct                             Percentage of characters that are the letter o
+# 22: a_pct                             Percentage of characters that are the letter a
+#
+# 23: numStrFuncs                       Number of functions processing strings
+# 24: numCodingFuncs                    Number of coding related functions
+# 25: maxStrLen                         Length of longest string in the file
+# 26: numRedirFuncs                     Number of redirection functions
+# 27: numExecFuncs                      Number of execution functions
+# 28: numBigInts                        Number of big integers (not implemented)
+# 29: numExecFiles                      Number of file executions (not implemented)
+# 30: numSpecSymbols                    Number of special symbols
+# 31: avgCdRowsPerLn                    Average number of code rows per file line
+#
 # This script was written by z5195413 Simon Smalley and z5087415 Lachlan Cairns for ZEIT8025 - Reverse Engineering Malware
 
 import os
@@ -32,17 +51,15 @@ import sys
 import math
 
 # Path to folder containing javascript files
-#benign_target_folder_path = ".\\benign_subset_10pct"
-#malicious_target_folder_path = ".\\malicious_subset_10pct"
 benign_target_folder_path = ".\\benign"
 malicious_target_folder_path = ".\\malicious"
 
 #Set to 1 for paralell processing
-#Increases speed of processing the dataset but runs risk of resource lock causing a program stall
+#Increases speed of processing the dataset but runs risk of resource lock causing a program stall or gaps in output file due to resource pre-emption
 parallel_processing = 0
 
 # Output CSV location
-output_file_loc = ".\\js_feature_extraction_all.csv"
+output_file_loc = ".\\js_feature_extraction_charlen-avcoderows.csv"
 
 # Prepare the first line of the output
 #to add a new field: add here, add calculation in process(), 
@@ -69,9 +86,18 @@ fields = [
 	'i_pct', 
 	'o_pct', 
 	'a_pct',
+	'numStrFuncs', 
+	'numCodingFuncs', 
+	'maxStrLen', 
+	'numRedirFuncs', 
+	'numExecFuncs', 
+	'numBigInts', 
+	'numExecFiles', 
+	'numSpecSymbols',
+	'avgCdRowsPerLn',
 	'malicious']
 
-#fields = ['entropy', 'e_pct', 'n_pct', 't_pct', 'i_pct', 'o_pct', 'a_pct', 'malicious']
+	
 
 with open(output_file_loc, 'w+', newline='') as outfile:
 	write = csv.writer(outfile)
@@ -103,11 +129,13 @@ def process(input_file):
 	file = open(input_file, encoding="ISO-8859-1").read()
 	file_as_string = "".join(file)
 	
+	
 	# 01: Length in characters (len_chars) - don't process this file if the file is empty
-	len_chars = len(file)
+	len_chars = len(file_as_string)
+	#len_chars = len(file)
 	if len_chars == 0:
 		return None
-
+	
 	# 04: Num of strings (num_strings)
 	string_regex_one = r"""['].*?[']"""
 	string_regex_two = r"""["].*?["]"""
@@ -258,8 +286,59 @@ def process(input_file):
 		i_pct = 0
 		o_pct = 0
 		a_pct = 0
-		
-
+	
+	#numStrFuncs
+	str_funcs = ['subString', 'charAt', 'split']
+	numStrFuncs = 0
+	for str_func in str_funcs:
+		#numStrFuncs += methods.count(str_func)
+		numStrFuncs += file_as_string.count(str_func)
+	
+	#numCodingFuncs
+	cod_funcs = ['escape', 'unescape', 'String', 'fromCharCode']
+	numCodingFuncs = 0
+	for cod_func in cod_funcs:
+		#numCodingFuncs += methods.count(cod_func)
+		numCodingFuncs += file_as_string.count(cod_func)
+	
+	#maxStrLen
+	maxStrLen = 0
+	for sub_string in " ".join(file).split(" "):
+		if len(sub_string) > maxStrLen:
+			maxStrLen = len(sub_string)
+	
+	#numRedirFuncs
+	redir_funcs = ['document.URL', 'document.referrer', 'document.location', 'setTimeout', 'location.replace', 'location.reload']	
+	numRedirFuncs = 0
+	for redir_func in redir_funcs:
+		#numRedirFuncs += methods.count(redir_func)
+		numRedirFuncs += file_as_string.count(redir_func)
+	
+	#numExecFuncs
+	exec_funcs = ['ActiveXObject', 'createElement', 'document.write', 'document.writln']
+	numExecFuncs = 0
+	for exec_func in exec_funcs:
+		#numExecFuncs += methods.count(exec_func)
+		numExecFuncs += file_as_string.count(exec_func)
+	
+	#numBigInts
+	numBigInts = 0
+	
+	#numExecFiles
+	numExecFiles = 0
+	
+	#numSpecSymbols
+	spec_symbols = ['!', '"','#','$', '%','&',"'",'('')', '*','+',',', '-', '.','/',':',';', '<','=','>','?','@','[',']', '^', '_','{','}','|','~']
+	numSpecSymbols = 0
+	for spec_symbol in spec_symbols:
+		numSpecSymbols += file_as_string.count(spec_symbol)
+	
+	#avgCdRowsPerLn
+	if len(file) > 0:
+		avgCdRowsPerLn = file_as_string.count(";")/len(file)
+	else:
+		avgCdRowsPerLn = 0
+	
 	# --------------------------------------------------------- #
 	#						 OUTPUT							#
 	# --------------------------------------------------------- #
@@ -286,8 +365,16 @@ def process(input_file):
 		i_pct, 
 		o_pct, 
 		a_pct,
+		numStrFuncs, 
+		numCodingFuncs, 
+		maxStrLen, 
+		numRedirFuncs, 
+		numExecFuncs, 
+		numBigInts, 
+		numExecFiles, 
+		numSpecSymbols, 
+		avgCdRowsPerLn,
 		malicious]
-	#outlist = [entropy, e_pct, n_pct, t_pct, i_pct, o_pct, a_pct, malicious]
 
 	outfile = open(output_file_loc, 'a', newline='')
 	write = csv.writer(outfile)
@@ -296,6 +383,8 @@ def process(input_file):
 
 	return outlist
 
+#given a list of file paths, recursively search for all js files in those file paths
+#assumes all javascript files have .js extension, and only javascript files have .js extension
 def get_js_files(file_paths):
 	filelist = []
 	filepaths = file_paths
@@ -314,31 +403,6 @@ def get_js_files(file_paths):
 			print("File error, skipping")
 		i += 1
 	return filelist
-		    
-
-#given a list of file paths, recursively search for all js files in those file paths
-#assumption that file path given only contains folders and .js files, otherwise will break
-'''def get_js_files(file_paths):
-	filelist = []
-	
-	#final case where all paths searched
-	if len(file_paths) == 0:
-		return []
-
-	for item in os.listdir(file_paths[0]):
-		item_full_path = os.path.join(file_paths[0] ,item)
-		print(item_full_path)
-		#if is .js file then add path to filelist
-		if os.path.isfile(item_full_path) and item[-3:] == '.js':
-			filelist.append(item_full_path)
-		elif os.path.isdir(item_full_path):
-			file_paths.append(item_full_path)
-		#if is folder then append to file_paths
-	#
-	if len(file_paths) == 1:
-		return filelist
-	else:
-		return filelist + get_js_files(file_paths[1:])'''
 
 # Process metrics
 start_time = time.time()
@@ -370,8 +434,6 @@ if parallel_processing:
 		for infile in benign_js_file_list:
 			futures.append(executor.submit(process, input_file=infile))
 			files_complete += 1
-			#print(files_complete)
-			#pct_complete = update_pct_complete(files_complete, len(benign_js_file_list), pct_complete, "benign")
 		for future in concurrent.futures.as_completed(futures):
 			main_output_list.append(future.result())
 			executor.shutdown()
@@ -379,11 +441,6 @@ else:
 	for infile in benign_js_file_list:
 		process(infile)
 		files_complete += 1
-		#print(files_complete)
-		#pct_complete = update_pct_complete(files_complete, len(benign_js_file_list), pct_complete, "benign")
-		#if pct_complete < round(files_complete/len(benign_js_file_list)*100,0):
-		#	pct_complete = round(files_complete/len(benign_js_file_list)*100,0)
-		#	print(str(pct_complete) + "% complete processing benign scripts")
 	
 
 # Are these benign files or malicious files (0 = benign, 1 = malicious)
@@ -407,8 +464,6 @@ if parallel_processing:
 		for infile in malicious_js_file_list:
 			futures.append(executor.submit(process, input_file=infile))
 			files_complete += 1
-			#print(files_complete)
-			#pct_complete = update_pct_complete(files_complete, len(malicious_js_file_list), pct_complete, "malicious")
 		for future in concurrent.futures.as_completed(futures):
 			main_output_list.append(future.result())
 			executor.shutdown()
@@ -416,11 +471,7 @@ else:
 	for infile in malicious_js_file_list:
 		process(infile)
 		files_complete += 1
-		#print(files_complete)
-		#pct_complete = update_pct_complete(files_complete, len(malicious_js_file_list), pct_complete, "malicious")
-		#if pct_complete < round(files_complete/len(malicious_js_file_list)*100,0):
-		#	pct_complete = round(files_complete/len(malicious_js_file_list)*100,0)
-		#	print(str(pct_complete) + "% complete processing malicious scripts")
 
 print("Processing complete. Time taken:", round(time.time() - start_time,2), 'seconds')
 print("Complete.")
+
